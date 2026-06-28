@@ -7,8 +7,8 @@ logger = logging.getLogger(__name__)
 class UserDatabase:
     def __init__(self):
         # Определяем путь к БД
-        #self.db_path = '/data/bot_users.db'
-        self.db_path = 'bot_users.db'
+        self.db_path = '/data/bot_users.db'  #хостинг
+        #self.db_path = 'bot_users.db'       #пк
 
     async def create_table(self):
         async with aiosqlite.connect(self.db_path) as connection:
