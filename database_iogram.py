@@ -17,7 +17,8 @@ class UserDatabase:
                                     CREATE TABLE IF NOT EXISTS users ( 
                                         telegram_id INTEGER PRIMARY KEY,
                                         is_admin BOOLEAN NOT NULL,
-                                        username TEXT NOT NULL
+                                        username TEXT NOT NULL,
+                                        auto_answer TEXT ,
                                     )
                                 ''')
                 await cursor.execute('''
@@ -33,12 +34,12 @@ class UserDatabase:
                                     ) ''')
                 await connection.commit()
 
-    async def add_user(self, telegram_id, is_admin, username):
+    async def add_user(self, telegram_id, is_admin, username,auto_answer ):
         try:
             async with aiosqlite.connect(self.db_path) as connection:
                 async with connection.cursor() as cursor:
                      await cursor.execute(
-                         'INSERT INTO users (telegram_id, is_admin, username) VALUES (?, ?, ?)',
+                         'INSERT INTO users (telegram_id, is_admin, username,auto_answer) VALUES (?, ?, ?,?)',
                          (telegram_id, is_admin, username)
                      )
                      await connection.commit()
@@ -62,7 +63,8 @@ class UserDatabase:
                 return {
                     'telegram_id': result[0],
                     'is_admin': result[1],
-                    'username': result[2],       #на выходе словарь будет
+                    'username': result[2],
+                    'auto_answer':result[3]#на выходе словарь будет
                 }
             return None
         except Exception as e:
