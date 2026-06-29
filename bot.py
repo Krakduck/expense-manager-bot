@@ -8,11 +8,6 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 import random
 import os
 from database_iogram import UserDatabase
-import logging
-
-# ========== НАСТРОЙКА ЛОГИРОВАНИЯ ==========
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 bot_token = os.getenv('BOT_TOKEN')
 admin_id = int(os.getenv('ADMIN_ID'))
