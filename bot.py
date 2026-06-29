@@ -134,7 +134,17 @@ async def start_reg(message: Message, db: UserDatabase):
             is_admin = True
         await db.add_user(user_id,is_admin,name)
         await message.answer('Пожалуйста, измените имя в настройках профиля, чтобы участники беседы понимали кто Вы')
-    await profile(message)
+    await message.answer('💰 Бот-Счетовод: Как это работает?\n'
+                         'Я помогаю компаниям делить совместные расходы и автоматически рассчитываю, кто кому и сколько должен перевести.\n'
+                         '📊 Основные команды:\n'
+                         '🔹 /del_profile — Удалить учетной записи.\n'
+                         '🔹 /spent — Добавить новую трату. Бот спросит сумму, описание и на кого записать расход (на конкретного человека или на всех).\n'
+                         '🔹 /debts — Показать итоговый баланс и оптимальную цепочку переводов для закрытия долгов.\n'
+                         '🔹 /clear_debt — Сбросить всю историю трат (для админов).\n'
+                         '🔹 /random — Выбрать случайного пользователя.\n'
+                         '🔹 /all — Упомянуть всех участников чата для быстрого сбора.\n'
+                         '⚙️ Попробуй также команду /profile, чтобы настроить свой профиль!')
+
 
 @router.message(Command("profile"))
 async def call_menu(message: Message):
@@ -145,7 +155,7 @@ async def del_profile(message: Message, state: FSMContext):
     if message.from_user.id == admin_id:
         builder = InlineKeyboardBuilder()
         builder.add(InlineKeyboardButton(text="Снести всю базу", callback_data="delete_all"))
-        builder.add(InlineKeyboardButton(text="Удалить себя", callback_data="delete_admin "))
+        builder.add(InlineKeyboardButton(text="Удалить себя", callback_data="delete_admin"))
         builder.adjust(1)
         await message.answer('Что именно удалить?', reply_markup=builder.as_markup())
     else:
