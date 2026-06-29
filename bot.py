@@ -192,7 +192,8 @@ async def random_user(message: Message, db: UserDatabase):
     if users:
         random_id = random.choice(users)
         name = await db.get_user(random_id)
-        await message.answer(name["username"])
+        mes = f"[{name}](tg://user?id={random_id}) "
+        await message.answer(mes, parse_mode="Markdown")
 
 @router.message(Command("all"))
 async def all_user(message: Message, db: UserDatabase):
