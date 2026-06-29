@@ -279,7 +279,7 @@ async def process_spent(message: Message, state: FSMContext, db: UserDatabase):
         await message.answer("❌ Неверный формат. Нужно: `Сумма Описание Кому`")
 
 @router.message(Answer.waiting_for_answer)
-async def process_answer(message: Message, state: FSMContext, db: UserDatabase):
+async def process_answer(message: Message, db: UserDatabase):
     text =message.text.strip().lower()
     if await db.update_user_param(message.from_user.id,'auto_answer',text):
         await message.answer('Фраза успешно изменена!')

@@ -40,7 +40,7 @@ class UserDatabase:
                 async with connection.cursor() as cursor:
                      await cursor.execute(
                          'INSERT INTO users (telegram_id, is_admin, username,auto_answer) VALUES (?, ?, ?,?)',
-                         (telegram_id, is_admin, username)
+                         (telegram_id, is_admin, username,auto_answer)
                      )
                      await connection.commit()
             return True
