@@ -90,9 +90,13 @@ class UserDatabase:
                 logger.info(f"RESULT ИЗ БАЗЫ: {result}")
                 # В result порядок такой же как в CREATE TABLE:
                 # (telegram_id, is_admin, username, password)
-                return {
-                    'telegram_id': result[0],
-                }
+                return result[0] # число
+                #return {
+                #    'telegram_id': result[0],
+                #    'is_admin': result[1],
+                #    'username': result[2],
+                #    'auto_answer': result[3]  # на выходе словарь будет
+                #}
             return None
         except Exception as e:
             logger.info(f"Ошибка поиска: {e}")
@@ -105,7 +109,7 @@ class UserDatabase:
                     await cursor.execute("SELECT telegram_id FROM users")
                     data = await cursor.fetchall()
 
-            return [row[0] for row in data]  # Вернет список вида: [djigurda, роман]
+            return [row[0] for row in data]
         except Exception as e:
             logger.info(f"Ошибка при получении статистики: {e}")
             return []
