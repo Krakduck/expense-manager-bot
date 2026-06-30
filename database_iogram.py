@@ -32,6 +32,11 @@ class UserDatabase:
                                         FOREIGN KEY (buyer_id) REFERENCES users (telegram_id),
                                         FOREIGN KEY (debtor_id) REFERENCES users (telegram_id)
                                     ) ''')
+                await cursor.execute('''
+                                    CREATE TABLE IF NOT EXISTS citation (
+                                        telegram_id INTEGER PRIMARY KEY,
+                                        text TEXT NOT NULL
+                                    ) ''')
                 await connection.commit()
 
     async def add_user(self, telegram_id, is_admin, username,auto_answer ):
@@ -145,6 +150,7 @@ class UserDatabase:
             return False
 
 
+
     async def add_transaction(self,chat_id, buyer_id, amount, description, debtor_id):
         try:
             async with aiosqlite.connect(self.db_path) as connection:
@@ -184,3 +190,40 @@ class UserDatabase:
         except Exception as e:
             logger.info(f"ошибка:{e}")
             return False
+
+
+
+    async def save_citation(self,telegram_id,text):
+        try:
+            async with aiosqlite.connect(self.db_path) as connection:
+                async with connection.cursor() as cursor:
+                    await cursor.execute(
+                        'INSERT INTO citations (telegram_id, text) VALUES (?, ?)',
+                        (telegram_id,text)
+                    )
+                    await connection.commit()
+            return True
+        except Exception as e:
+            logger.info(f"<UNK> <UNK> <UNK> <UNK>: {e}")
+            return False
+
+    async def get_citation(self, telegram_id):
+        try:
+            async with aiosqlite.connect(self.db_path) as connection:
+                async with connection.cursor() as cursor:
+                    await cursor.execute(
+                        'SELECT * FROM citations WHERE telegram_id = ?',
+                        (telegram_id,)
+                    )
+                    result =await cursor.fetchone()
+
+            if result:
+                logger.info(f"RESULT ИЗ БАЗЫ: {result}")
+                return {
+                    'telegram_id': result[0],
+                    'text': result[1],
+                }
+            return None
+        except Exception as e:
+            logger.info(f"Ошибка поиска: {e}")
+            return None

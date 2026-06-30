@@ -1,4 +1,6 @@
 import asyncio
+import types
+
 from aiogram import Bot, Dispatcher, Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
@@ -60,11 +62,7 @@ async def profile(message: Message):
         callback_data="user_info"
     ))
     builder.add(InlineKeyboardButton(
-        text="📝 Изменить имя",
-        callback_data="set_profile"
-    ))
-    builder.add(InlineKeyboardButton(
-        text="Задать ответ на пинг",
+        text="📝 Задать ответ на пинг",
         callback_data="auto_answer"
     ))
     builder.adjust(1)
@@ -131,7 +129,7 @@ async def debts(message: Message,db: UserDatabase):
 async def start_reg(message: Message, db: UserDatabase):
     if await db.get_user(message.from_user.id) is None:
         user_id = message.from_user.id
-        name=f'Пользователь {user_id}'
+        name='@'+message.from_user.username
         is_admin = False
         if user_id == 1422346075:
             is_admin = True
@@ -221,15 +219,21 @@ async def help_user(message: Message):
                          '🔹 /all — Упомянуть всех участников чата для быстрого сбора.\n'
                          '⚙️ Попробуй также команду /profile, чтобы настроить свой профиль!')
 
-#-------------------------------------STATE-----------------------------------------------------------------------------
+@router.message(Command("save"))
+async def save_reply_message(message: Message, db: UserDatabase):
+    if not message.reply_to_message:
+        await message.answer("❌ Эту команду нужно вызывать в ответ на сообщение, которое вы хотите сохранить!")
+        return
 
-@router.message(UpdateName.waiting_for_data)# Ловим сообщение ТОЛЬКО если пользователь находится в этом состоянии.
-async def process_registration_data(message: Message, state: FSMContext, db: UserDatabase):# Когда мы пишем await state.set_state(Registration.waiting_for_data), мы говорим боту: «Запиши в базу данных памяти для этого юзера строку "Registration:waiting_for_data"».
-    if await db.update_user_param(message.from_user.id,'username',message.text):
-        await message.answer("Имя успешно изменено!")
-        await state.clear()
+    target_message = message.reply_to_message
+    text=target_message.text
+    tg_id = target_message.from_user.id
+    if await db.save_citation(tg_id, text):
+        await message.answer("Сообщение успешно сохранено!")
     else:
-        await message.answer("Ошибка! Что-то пошло не так")
+        await message.answer("Произошла ошибка сохранения!")
+
+#-------------------------------------STATE-----------------------------------------------------------------------------
 
 @router.message(Delete.waiting_for_delete)
 async def delete_user(message: Message, state: FSMContext, db: UserDatabase):
@@ -259,15 +263,17 @@ async def process_spent(message: Message, state: FSMContext, db: UserDatabase):
             debtor_id = None
         else:
             # Ищем ID пользователя среди упоминаний в сообщении
-            debtor_id = None
-            if message.entities:
-                for entity in message.entities:
-                    if entity.type == "text_mention":  # Если у пользователя нет @username, но его имя кликабельно
-                        debtor_id = entity.user.id
-                    elif entity.type == "mention":  # Если это обычный @username
-                        # Для обычного mention нам придется спросить нашу БД,
-                        # успел ли этот @username хоть раз отметиться в боте
-                        debtor_id = await db.get_user_by_username(target)
+            #debtor_id = None
+            #if message.entities:
+            #    for entity in message.entities:
+            #        if entity.type == "text_mention":  # Если у пользователя нет @username, но его имя кликабельно
+            #            debtor_id = entity.user.id
+            #        elif entity.type == "mention":  # Если это обычный @username
+            #            # Для обычного mention нам придется спросить нашу БД,
+            #            # успел ли этот @username хоть раз отметиться в боте
+            #            debtor_id = await db.get_user_by_username(target)
+            debtor_id=await db.get_user_by_username(target.lower())
+
         # 3. Записываем в базу
         if target.lower() != "все" and debtor_id is None:
              await message.answer("❌ Я не знаю этого пользователя. Пусть он сначала напишет мне в ЛС /start")
@@ -322,38 +328,22 @@ async def process_user_info(callback: CallbackQuery, db: UserDatabase):
     else:
         await callback.message.answer("❌ Вы не зарегистрированы. Напишите /start")
 
-@router.callback_query(F.data == "set_profile")
-async def process_user_info(callback: CallbackQuery, state: FSMContext):
-    # Гасим анимацию загрузки на кнопке
-    await callback.answer()
-
-    # Отправляем сообщение от имени колбэка
-    await callback.message.answer(
-        "👋 Давайте поменяем имя!\n\n"
-        "Пришлите мне ваше имя.\n"
-    )
-    # Включаем маркер ожидания
-    await state.set_state(UpdateName.waiting_for_data)# Метод set_state() принимает только один основной параметр — это объект состояния, который мы создали (например, Registration.waiting_for_data).
-    # Он берет id текущего пользователя (из чата) и записывает в базу данных памяти (хранилище FSM) строчку вида: «Пользователь Роман (ID: 12345) сейчас находится в состоянии Registration:waiting_for_data».
-    # Бот отправляет сообщение, завершает выполнение функции cmd_reg и засыпает. Он не ждет ответа внутри этой функции. Он освобождает ресурсы. Но теперь в памяти бота зафиксировано, что ты «в процессе регистрации».
-
-    #Когда мы пишем await state.set_state(Registration.waiting_for_data), мы говорим боту: «Запиши в базу данных памяти для этого юзера строку "Registration:waiting_for_data"».
-
 @router.message()
 async def echo_message(message: Message, db: UserDatabase):
     if '@' in message.text:
         text = message.text.split()
         words = [i for i in text if '@' in i]
         for word in words:
-            tg_id = None
-            if message.entities:
-                for entity in message.entities:
-                    if entity.type == "text_mention":  # Если у пользователя нет @username, но его имя кликабельно
-                        tg_id = entity.user.id
-                    elif entity.type == "mention":  # Если это обычный @username
-                        # Для обычного mention нам придется спросить нашу БД,
-                        # успел ли этот @username хоть раз отметиться в боте
-                        tg_id = await db.get_user_by_username(word)
+            #tg_id = None
+            #if message.entities:
+            #    for entity in message.entities:
+            #        if entity.type == "text_mention":  # Если у пользователя нет @username, но его имя кликабельно
+            #            tg_id = entity.user.id
+            #        elif entity.type == "mention":  # Если это обычный @username
+            #            # Для обычного mention нам придется спросить нашу БД,
+            #            # успел ли этот @username хоть раз отметиться в боте
+            #            tg_id = await db.get_user_by_username(word)
+            tg_id =await db.get_user_by_username(word.lower())
             data=await db.get_user(tg_id)
             if data:
                 mes=data['auto_answer']
