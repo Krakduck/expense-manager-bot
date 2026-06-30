@@ -312,8 +312,11 @@ async def process_answer(message: Message, db: UserDatabase, state: FSMContext):
 async def process_someone_citations(message: Message, db: UserDatabase, state: FSMContext):
     if len(message.text.strip().split()) == 1:
         tg_id= await db.get_user_by_username(message.text)
+        await message.answer(tg_id)
         data = await db.get_citation(tg_id)
+        await message.answer(tg_id)
         mes=f'Вот все цитаты {message.text}:\n\n'
+        await message.answer(tg_id)
         for cit in data:
             mes+=f'"{cit}"\n'
         if mes:
@@ -323,7 +326,6 @@ async def process_someone_citations(message: Message, db: UserDatabase, state: F
         await state.clear()
     else:
         await message.answer("Отправь ТОЛЬКО юз человека ")
-
 
 #-------------------------------------CALLBACK--------------------------------------------------------------------------
 
