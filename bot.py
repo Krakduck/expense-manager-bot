@@ -312,17 +312,11 @@ async def process_answer(message: Message, db: UserDatabase, state: FSMContext):
 async def process_someone_citations(message: Message, db: UserDatabase, state: FSMContext):
     if len(message.text.strip().split()) == 1:
         tg_id= await db.get_user_by_username(message.text)
-        await message.answer(f'{tg_id}')
         data = await db.get_citation(tg_id)
-        await message.answer(f'{data}')
         mes=f'Вот все цитаты {message.text}:\n\n'
-        await message.answer(mes)
         for cit in data:
             mes+=f'"{cit}"\n'
-        if mes:
-            await message.message.answer(mes)
-        else:
-            await message.answer('Список цитат пользователя пуст')
+        await message.answer(mes)
         await state.clear()
     else:
         await message.answer("Отправь ТОЛЬКО юз человека ")
