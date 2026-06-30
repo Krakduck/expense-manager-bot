@@ -33,7 +33,7 @@ class UserDatabase:
                                         FOREIGN KEY (debtor_id) REFERENCES users (telegram_id)
                                     ) ''')
                 await cursor.execute('''
-                                    CREATE TABLE IF NOT EXISTS citation (
+                                    CREATE TABLE IF NOT EXISTS citations (
                                         telegram_id INTEGER PRIMARY KEY,
                                         text TEXT NOT NULL
                                     ) ''')

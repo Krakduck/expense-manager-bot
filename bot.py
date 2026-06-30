@@ -189,7 +189,8 @@ async def random_user(message: Message, db: UserDatabase):
     users = await db.get_all_users_id()
     if users:
         random_id = random.choice(users)
-        name = await db.get_user(random_id)
+        user_data=await db.get_user(random_id)
+        name = user_data['username']
         mes = f"[{name}](tg://user?id={random_id}) "
         await message.answer(mes, parse_mode="Markdown")
 
