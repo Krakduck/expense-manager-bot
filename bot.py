@@ -322,7 +322,7 @@ async def process_someone_citations(message: Message, db: UserDatabase, state: F
         if mes:
             await message.message.answer(mes)
         else:
-            await message.message.answer('Список цитат пользователя пуст')
+            await message.answer('Список цитат пользователя пуст')
         await state.clear()
     else:
         await message.answer("Отправь ТОЛЬКО юз человека ")
