@@ -310,7 +310,6 @@ async def process_answer(message: Message, db: UserDatabase, state: FSMContext):
 
 @router.message(Citation.waiting_for_citation)
 async def process_someone_citations(message: Message, db: UserDatabase, state: FSMContext):
-    await message.answer()
     if len(message.text.strip().split()) == 1:
         tg_id= await db.get_user_by_username(message.text)
         data = await db.get_citation(tg_id)
