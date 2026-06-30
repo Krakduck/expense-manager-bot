@@ -1,6 +1,4 @@
 import asyncio
-import types
-
 from aiogram import Bot, Dispatcher, Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
@@ -53,22 +51,6 @@ def format_user_profile(user_data: dict) -> str:
         f"ID: `{user_data['telegram_id']}`\n"
         f"Имя: {user_data['username']}\n"
         f"Статус: {'Администратор' if user_data['is_admin'] else 'Пользователь'}"
-    )
-
-async def profile(message: Message):
-    builder = InlineKeyboardBuilder()
-    builder.add(InlineKeyboardButton(
-        text="👤 Мой профиль",
-        callback_data="user_info"
-    ))
-    builder.add(InlineKeyboardButton(
-        text="📝 Задать ответ на пинг",
-        callback_data="auto_answer"
-    ))
-    builder.adjust(1)
-    await message.answer(
-        "Выбери, что тебя интересует 👇",
-        reply_markup=builder.as_markup()
     )
 
 async def debts(message: Message,db: UserDatabase):
@@ -148,7 +130,20 @@ async def start_reg(message: Message, db: UserDatabase):
 
 @router.message(Command("profile"))
 async def call_menu(message: Message):
-    await profile(message)
+    builder = InlineKeyboardBuilder()
+    builder.add(InlineKeyboardButton(
+        text="👤 Мой профиль",
+        callback_data="user_info"
+    ))
+    builder.add(InlineKeyboardButton(
+        text="📝 Задать ответ на пинг",
+        callback_data="auto_answer"
+    ))
+    builder.adjust(1)
+    await message.answer(
+        "Выбери, что тебя интересует 👇",
+        reply_markup=builder.as_markup()
+    )
 
 @router.message(Command("del_profile"))
 async def del_profile(message: Message, state: FSMContext):
@@ -233,6 +228,23 @@ async def save_reply_message(message: Message, db: UserDatabase):
         await message.answer("Сообщение успешно сохранено!")
     else:
         await message.answer("Произошла ошибка сохранения!")
+
+@router.message(Command("citations"))
+async def citations(message: Message):
+    builder = InlineKeyboardBuilder()
+    builder.add(InlineKeyboardButton(
+        text="Все цитаты",
+        callback_data="all_citations"
+    ))
+    builder.add(InlineKeyboardButton(
+        text="Цитаты конкретного человека",
+        callback_data="someone_citations"
+    ))
+    builder.adjust(1)
+    await message.answer(
+        "Выбери, что тебя интересует 👇",
+        reply_markup=builder.as_markup()
+    )
 
 #-------------------------------------STATE-----------------------------------------------------------------------------
 
@@ -328,6 +340,19 @@ async def process_user_info(callback: CallbackQuery, db: UserDatabase):
         await callback.message.answer(text)
     else:
         await callback.message.answer("❌ Вы не зарегистрированы. Напишите /start")
+
+@router.callback_query(F.data == "all_citations")
+async def process_all_citations(callback: CallbackQuery, db: UserDatabase):
+    await callback.answer()
+    data = await db.get_all_citation()
+    mes=''
+    for cit in data:
+        tg_id, citation = cit
+        user_info=await db.get_user(tg_id)
+        username = user_info['username']
+        mes+=f'{username} сказал/а:"{citation}"\n'
+    if mes:
+        await callback.message.answer(mes)
 
 @router.message()
 async def echo_message(message: Message, db: UserDatabase):

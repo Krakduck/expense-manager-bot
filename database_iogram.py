@@ -227,3 +227,15 @@ class UserDatabase:
         except Exception as e:
             logger.info(f"Ошибка поиска: {e}")
             return None
+
+    async def get_all_citation(self):
+        try:
+            async with aiosqlite.connect(self.db_path) as connection:
+                async with connection.cursor() as cursor:
+                    await cursor.execute("SELECT * FROM citations")
+                    data = await cursor.fetchall() #Метод cursor.fetchall() возвращает данные в виде списка кортежей
+
+            return data
+        except Exception as e:
+            logger.info(f"Ошибка при получении статистики: {e}")
+            return []
