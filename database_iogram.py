@@ -212,20 +212,24 @@ class UserDatabase:
             async with aiosqlite.connect(self.db_path) as connection:
                 async with connection.cursor() as cursor:
                     await cursor.execute(
-                        'SELECT * FROM citations WHERE telegram_id = ?',
+                        'SELECT text FROM citations WHERE telegram_id = ?',  # Просим только текст, id мы и так знаем
                         (telegram_id,)
                     )
-                    result =await cursor.fetchone()
+                    # fetchall() забирает ВСЕ строки из базы для этого юзера
+                    rows = await cursor.fetchall()
 
-            if result:
-                logger.info(f"RESULT ИЗ БАЗЫ: {result}")
-                return {
-                    'telegram_id': result[0],
-                    'text': result[1],
-                }
+            if rows:
+                logger.info(f"RESULT ИЗ БАЗЫ: {rows}")
+
+                # rows — это список кортежей вида [("Цитата 1",), ("Цитата 2",)].
+                # Делаем из него красивый плоский список строк:
+                citations_list = [row[0] for row in rows]
+
+                return citations_list
+
             return None
         except Exception as e:
-            logger.info(f"Ошибка поиска: {e}")
+            logger.error(f"Ошибка поиска: {e}")  # Для ошибок лучше использовать logger.error
             return None
 
     async def get_all_citation(self):

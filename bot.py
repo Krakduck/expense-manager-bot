@@ -45,6 +45,9 @@ class Spent(StatesGroup):
 class Answer (StatesGroup):
     waiting_for_answer = State()
 
+class Citation (StatesGroup):
+    waiting_for_citation = State()
+
 def format_user_profile(user_data: dict) -> str:
     return (
         f"👤 **Профиль пользователя**\n\n"
@@ -305,6 +308,24 @@ async def process_answer(message: Message, db: UserDatabase, state: FSMContext):
         await message.answer('Фраза успешно изменена!')
     await state.clear()
 
+@router.message(Citation.waiting_for_citation)
+async def process_someone_citations(message: Message, db: UserDatabase, state: FSMContext):
+    await message.answer()
+    if len(message.text.strip().split()) == 1:
+        tg_id= await db.get_user_by_username(message.text)
+        data = await db.get_citation(tg_id)
+        mes=f'Вот все цитаты {message.text}:\n\n'
+        for cit in data:
+            mes+=f'"{cit}"\n'
+        if mes:
+            await message.message.answer(mes)
+        else:
+            await message.message.answer('Список цитат пользователя пуст')
+        await state.clear()
+    else:
+        await message.answer("Отправь ТОЛЬКО юз человека ")
+
+
 #-------------------------------------CALLBACK--------------------------------------------------------------------------
 
 @router.callback_query(F.data == "auto_answer")
@@ -353,6 +374,12 @@ async def process_all_citations(callback: CallbackQuery, db: UserDatabase):
         mes+=f'{username} сказал/а:"{citation}"\n'
     if mes:
         await callback.message.answer(mes)
+
+@router.callback_query(F.data == "someone_citations")
+async def someone_citations(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await callback.message.answer('Напиши юз человека, чьи цитаты хочешь посмотреть ')
+    await state.set_state(Citation.waiting_for_citation)
 
 @router.message()
 async def echo_message(message: Message, db: UserDatabase):
