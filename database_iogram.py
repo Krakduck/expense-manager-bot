@@ -9,6 +9,24 @@ class UserDatabase:
         # Определяем путь к БД
         self.db_path = '/data/bot_users.db'  #хостинг
         #self.db_path = 'bot_users.db'       #пк
+        self.connection = None  # Здесь будем хранить наше единое соединение
+
+    async def connect(self):
+        """Открывает ОДНО постоянное соединение"""
+        if self.connection is None:
+            self.connection = aiosqlite.connect(self.db_path)
+            # Активируем соединение
+            await self.connection.__aenter__()
+            # Чтобы строки из expenses возвращались как словари (как у тебя и было)
+            self.connection.row_factory = aiosqlite.Row
+            logger.info("Успешное подключение к базе данных!")
+
+    async def close(self):
+        """Закрывает соединение при выключении бота"""
+        if self.connection:
+            await self.connection.__aexit__(None, None, None)
+            self.connection = None
+            logger.info("Соединение с базой данных закрыто.")
 
     async def create_table(self):
         async with aiosqlite.connect(self.db_path) as connection:
@@ -215,7 +233,7 @@ class UserDatabase:
                     await connection.commit()
             return True
         except Exception as e:
-            logger.info(f"<UNK> <UNK> <UNK> <UNK>: {e}")
+            logger.info(f"{e}")
             return False
 
     async def get_citation(self, telegram_id):
@@ -266,7 +284,9 @@ class UserDatabase:
                          (streak,text,counter_type)
                      )
                      await connection.commit()
-            return True
+                     # Получаем ID только что созданной строки!
+                     generated_id = cursor.lastrowid
+                     return generated_id
         except Exception as e:
             logger.info(f"Ошибка добавления: {e}")
             return False
@@ -308,5 +328,5 @@ class UserDatabase:
                     await connection.commit()
             return True
         except Exception as e:
-            logger.info(f"<UNK> {event_id}: {e}")
+            logger.info(f"{event_id}: {e}")
             return False

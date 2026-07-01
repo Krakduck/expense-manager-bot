@@ -7,6 +7,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import random
+import html
 import os
 from database_iogram import UserDatabase
 
@@ -17,6 +18,9 @@ async def main():
     bot = Bot(token=bot_token)
     dp=Dispatcher()
     db=UserDatabase()
+
+    # 1. Инициализируем ЕДИНОЕ соединение с БД перед созданием таблиц
+    await db.connect()
 
     # 2. Подключаем обработчики
     dp.include_router(router)
@@ -30,20 +34,17 @@ async def main():
 
     scheduler.start()
 
+    await dp.start_polling(bot, db=db, scheduler=scheduler)
+
     # 4. Запускаем бота (polling)
     print("Бот успешно запущен!")
     await dp.start_polling(bot,db=db)
 
-class ContinueEventCallback(CallbackData, prefix="cont_evt"):
-    event_id: int  # Передаем ID события как число
 
-async def scheduled_task(bot: Bot, chat_id: int, db: UserDatabase, callback_data: ContinueEventCallback):
-    target_id = callback_data.event_id
-    if await db.event_continue_streak(target_id):
-        await bot.send_message(
-            chat_id=chat_id,
-            text=f"⏰ Серия продлена!"
-        )
+
+async def scheduled_task(bot: Bot, chat_id: int, db: UserDatabase, event_id: int):
+    if await db.event_continue_streak(event_id):
+        await bot.send_message(chat_id=chat_id, text="⏰ Серия продлена!")
 
 # Создаем роутер (маршрутизатор) для наших обработчиков
 router = Router()
@@ -73,6 +74,9 @@ class CreateEvent (StatesGroup):
     waiting_for_event = State()
 
 class DeleteEventCallback(CallbackData, prefix="del_evt"):
+    event_id: int  # Передаем ID события как число
+
+class ContinueEventCallback(CallbackData, prefix="cont_evt"):
     event_id: int  # Передаем ID события как число
 
 def format_user_profile(user_data: dict) -> str:
@@ -215,9 +219,10 @@ async def random_user(message: Message, db: UserDatabase):
     if users:
         random_id = random.choice(users)
         user_data=await db.get_user(random_id)
-        name = user_data['username']
-        mes = f"[{name}](tg://user?id={random_id}) "
-        await message.answer(mes, parse_mode="Markdown")
+        # html.escape превратит небезопасные <, >, & в безопасные сущности
+        safe_name = html.escape(user_data['username'])
+        mes = f'<a href="tg://user?id={random_id}">{safe_name}</a>'
+        await message.answer(mes, parse_mode="HTML")
 
 @router.message(Command("all"))
 async def all_user(message: Message, db: UserDatabase):
@@ -227,10 +232,9 @@ async def all_user(message: Message, db: UserDatabase):
         # Получаем данные пользователя по его ID
         user_data = await db.get_user(user_id)
         if user_data:
-            name = user_data['username']
-            # Теперь у нас есть и имя для текста, и ID для ссылки
-            mes += f"[{name}](tg://user?id={user_id}) "
-    await message.answer(mes, parse_mode="Markdown")
+            safe_name = html.escape(user_data['username'])
+            mes += f'<a href="tg://user?id={user_id}">{safe_name}</a> '
+    await message.answer(mes, parse_mode="HTML")
 
 @router.message(Command("help"))
 async def help_user(message: Message):
@@ -376,14 +380,21 @@ async def process_create_event(message: Message, db: UserDatabase, state: FSMCon
     data = await state.get_data()
     counter_type = data.get("counter_type")
     text = message.text.strip()
-    if await db.add_event(0,text,counter_type):
+    event_id = await db.add_event(0, text, counter_type)
+    if event_id is not None:
         scheduler.add_job(
             scheduled_task,
             trigger='cron',
-            hour=00,
-            minute=00,
-            kwargs={'bot': bot_token},
-            id=f"job_{current_chat_id}"
+            hour=0,
+            minute=0,
+            kwargs={
+                'bot': message.bot,  # Передаем живой объект бота из message
+                'chat_id': current_chat_id,
+                'db': db,  # Передаем нашу базу
+                'event_id': event_id  # Передаем ID события
+            },
+            id=f"job_{current_chat_id}_{event_id}"
+            # Делаем ID уникальным, чтобы задачи разных чатов не затирали друг друга
         )
         await message.answer('Событие добавлено!')
     else:
