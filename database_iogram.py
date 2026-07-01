@@ -34,8 +34,15 @@ class UserDatabase:
                                     ) ''')
                 await cursor.execute('''
                                     CREATE TABLE IF NOT EXISTS citations (
-                                        telegram_id INTEGER PRIMARY KEY,
+                                        telegram_id INTEGER ,
                                         text TEXT NOT NULL
+                                    ) ''')
+                await cursor.execute('''
+                                    CREATE TABLE IF NOT EXISTS events (
+                                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                                        streak INTEGER NOT NULL,
+                                        text TEXT NOT NULL,
+                                        counter_type TEXT NOT NULL
                                     ) ''')
                 await connection.commit()
 
@@ -247,3 +254,59 @@ class UserDatabase:
         except Exception as e:
             logger.info(f"Ошибка при получении статистики: {e}")
             return []
+
+
+
+    async def add_event(self,streak,text,counter_type):
+        try:
+            async with aiosqlite.connect(self.db_path) as connection:
+                async with connection.cursor() as cursor:
+                     await cursor.execute(
+                         'INSERT INTO events (streak,text,counter_type) VALUES (?, ?, ?)',
+                         (streak,text,counter_type)
+                     )
+                     await connection.commit()
+            return True
+        except Exception as e:
+            logger.info(f"Ошибка добавления: {e}")
+            return False
+
+    async def get_all_event(self):
+        try:
+            async with aiosqlite.connect(self.db_path) as connection:
+                async with connection.cursor() as cursor:
+                    await cursor.execute("SELECT * FROM events")
+                    data = await cursor.fetchall() #в виде списка кортежей
+
+            return data
+        except Exception as e:
+            logger.info(f"Ошибка при получении статистики: {e}")
+            return []
+
+    async def delete_event(self, id):
+        try:
+            async with aiosqlite.connect(self.db_path) as connection:
+                async with connection.cursor() as cursor:
+                    query = f"DELETE FROM events WHERE id = ?"
+                    await cursor.execute(query, (id,))
+                    await connection.commit()
+
+            return True
+        except Exception as e:
+            logger.info(f"ошибка {id}: {e}")
+            return False
+
+    async def event_continue_streak(self, event_id, value_to_add = 1):
+        try:
+            async with aiosqlite.connect(self.db_path) as connection:
+                async with connection.cursor() as cursor:
+                    await cursor.execute(
+                        # Предположим, что параметр называется 'counter_value'
+                        "UPDATE events SET streak = streak + ? WHERE id = ?",
+                        (value_to_add, event_id)
+                    )
+                    await connection.commit()
+            return True
+        except Exception as e:
+            logger.info(f"<UNK> {event_id}: {e}")
+            return False

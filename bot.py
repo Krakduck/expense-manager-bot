@@ -1,10 +1,11 @@
 import asyncio
 from aiogram import Bot, Dispatcher, Router, F
-from aiogram.filters import Command
+from aiogram.filters import Command,CallbackData
 from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import random
 import os
 from database_iogram import UserDatabase
@@ -24,9 +25,25 @@ async def main():
     print("Создаем таблицы в базе данных...")
     await db.create_table()
 
+    # Инициализируем планировщик
+    scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
+
+    scheduler.start()
+
     # 4. Запускаем бота (polling)
     print("Бот успешно запущен!")
     await dp.start_polling(bot,db=db)
+
+class ContinueEventCallback(CallbackData, prefix="cont_evt"):
+    event_id: int  # Передаем ID события как число
+
+async def scheduled_task(bot: Bot, chat_id: int, db: UserDatabase, callback_data: ContinueEventCallback):
+    target_id = callback_data.event_id
+    if await db.event_continue_streak(target_id):
+        await bot.send_message(
+            chat_id=chat_id,
+            text=f"⏰ Серия продлена!"
+        )
 
 # Создаем роутер (маршрутизатор) для наших обработчиков
 router = Router()
@@ -35,6 +52,10 @@ class UpdateName(StatesGroup): # класс создается как конте
     waiting_for_data = State()# это и есть создание конкретного «статуса» (состояния). Когда пользователь пишет боту, aiogram смотрит на этого пользователя и спрашивает у своей памяти:
                           # «У Романа сейчас включен маркер Registration.waiting_for_data?». Если да, то сообщение отправляется в функцию регистрации, а не в игру или главное меню.
                          #Грубо говоря, aiogram внутри себя превращает это в обычную строку, например: "Registration:waiting_for_data".Там лежит объект-указатель, имя которого строго привязано к твоему классу.
+
+#waiting_for_event = State()      # Шаг 1: Ждем текст/название
+#waiting_for_description = State() # Шаг 2: Ждем описание (если нужно)
+#waiting_for_date = State()        # Шаг 3: Ждем дату (если нужно)
 
 class Delete(StatesGroup):
     waiting_for_delete = State()
@@ -47,6 +68,12 @@ class Answer (StatesGroup):
 
 class Citation (StatesGroup):
     waiting_for_citation = State()
+
+class CreateEvent (StatesGroup):
+    waiting_for_event = State()
+
+class DeleteEventCallback(CallbackData, prefix="del_evt"):
+    event_id: int  # Передаем ID события как число
 
 def format_user_profile(user_data: dict) -> str:
     return (
@@ -114,7 +141,7 @@ async def debts(message: Message,db: UserDatabase):
 async def start_reg(message: Message, db: UserDatabase):
     if await db.get_user(message.from_user.id) is None:
         user_id = message.from_user.id
-        name='@'+message.from_user.username
+        name = f"@{message.from_user.username}" if message.from_user.username else f"Пользователь_{message.from_user.id}"
         is_admin = False
         if user_id == 1422346075:
             is_admin = True
@@ -249,6 +276,27 @@ async def citations(message: Message):
         reply_markup=builder.as_markup()
     )
 
+@router.message(Command("event"))
+async def counter(message: Message):
+    builder = InlineKeyboardBuilder()
+    builder.add(InlineKeyboardButton(
+        text="Создать событие",
+        callback_data="create_event"
+    ))
+    builder.add(InlineKeyboardButton(
+        text="Удалить событие",
+        callback_data="del_event"
+    ))
+    builder.add(InlineKeyboardButton(
+        text="Продлить вручную",
+        callback_data="continue_event"
+    ))
+    builder.adjust(1)
+    await message.answer(
+        "Выбери, что тебя интересует 👇",
+        reply_markup=builder.as_markup()
+    )
+
 #-------------------------------------STATE-----------------------------------------------------------------------------
 
 @router.message(Delete.waiting_for_delete)
@@ -321,6 +369,28 @@ async def process_someone_citations(message: Message, db: UserDatabase, state: F
     else:
         await message.answer("Отправь ТОЛЬКО юз человека ")
 
+@router.message(CreateEvent.waiting_for_event)
+async def process_create_event(message: Message, db: UserDatabase, state: FSMContext, scheduler: AsyncIOScheduler):
+    current_chat_id = message.chat.id
+    # Добавляем задачу (Job)
+    data = await state.get_data()
+    counter_type = data.get("counter_type")
+    text = message.text.strip()
+    if await db.add_event(0,text,counter_type):
+        scheduler.add_job(
+            scheduled_task,
+            trigger='cron',
+            hour=00,
+            minute=00,
+            kwargs={'bot': bot_token},
+            id=f"job_{current_chat_id}"
+        )
+        await message.answer('Событие добавлено!')
+    else:
+        await message.answer('Ошибка добавления!')
+
+    await state.clear()
+
 #-------------------------------------CALLBACK--------------------------------------------------------------------------
 
 @router.callback_query(F.data == "auto_answer")
@@ -376,9 +446,96 @@ async def someone_citations(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer('Напиши юз человека, чьи цитаты хочешь посмотреть ')
     await state.set_state(Citation.waiting_for_citation)
 
+@router.callback_query(F.data == "create_event")
+async def create_event(callback: CallbackQuery):
+    await callback.answer()
+    builder = InlineKeyboardBuilder()
+    builder.add(InlineKeyboardButton(
+        text="Автоматическое продление серии",
+        callback_data="auto_counter"
+    ))
+    builder.add(InlineKeyboardButton(
+        text="Ручное продление серии",
+        callback_data="manual_counter"
+    ))
+    builder.adjust(1)
+    await callback.edit_message_text(
+        "Выберите режим события",
+        reply_markup=builder.as_markup()
+    )
+
+@router.callback_query(F.data == "del_event")
+async def delete_event(callback: CallbackQuery, db: UserDatabase):
+    await callback.answer()
+    builder = InlineKeyboardBuilder()
+    data = await db.get_all_event()
+    if data:
+        for event in data:
+            text = event[2]
+            ev_id=event[0]
+            builder.add(InlineKeyboardButton(
+                text=text,
+                callback_data=DeleteEventCallback(event_id=ev_id).pack()
+            ))
+        builder.adjust(1)
+        await callback.message.answer("Выберите событие для удаления:", reply_markup=builder.as_markup())
+    else:
+        await callback.message.answer("У вас пока нет созданных событий.")
+
+@router.callback_query(F.data == "continue_event")
+async def continue_event(callback: CallbackQuery,  db: UserDatabase):
+    await callback.answer()
+    builder = InlineKeyboardBuilder()
+    data = await db.get_all_event()
+    if data:
+        for event in data:
+            text = event[2]
+            ev_id = event[0]
+            builder.add(InlineKeyboardButton(
+                text=text,
+                callback_data=ContinueEventCallback(event_id=ev_id).pack()
+            ))
+        builder.adjust(1)
+        await callback.message.answer("Выберите событие для продления серии:", reply_markup=builder.as_markup())
+    else:
+        await callback.message.answer("У вас пока нет созданных событий.")
+
+@router.callback_query(F.data == "auto_counter")
+async def auto_counter(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.update_data(counter_type="auto")  #CreateEvent(StatesGroup)
+   #                                                        └── waiting_for_event (State)  <-- Пользователь "находится" здесь
+
+                                                        #FSMContext (Память для текущего пользователя):
+                                                           #├── Cостояние: CreateEvent.waiting_for_event
+                                                           #└── Данные (Data): {"counter_type": "automatic"} <-- Параметр хранится тут
+    await callback.message.answer('Напиши название события')
+    await state.set_state(CreateEvent.waiting_for_event)
+
+@router.callback_query(F.data == "manual_counter")
+async def manual_counter(callback: CallbackQuery, state: FSMContext):
+    await callback.answer()
+    await state.update_data(counter_type="manual")
+    await callback.message.answer('Напиши название события')
+    await state.set_state(CreateEvent.waiting_for_event)
+
+@router.callback_query(DeleteEventCallback.filter())
+async def process_delete_event(callback: CallbackQuery, callback_data: DeleteEventCallback, db: UserDatabase):
+    target_id = callback_data.event_id
+    await db.delete_event(target_id)
+    await callback.answer("Событие успешно удалено!")
+
+@router.callback_query(ContinueEventCallback.filter())
+async def process_continue_event(callback: CallbackQuery, callback_data: ContinueEventCallback, db: UserDatabase):
+    target_id = callback_data.event_id
+    if await db.event_continue_streak(target_id):
+        await callback.message.answer("Событие успешно продлено!")
+    else:
+        await callback.message.answer("Ошибка продления!")
+
 @router.message()
 async def echo_message(message: Message, db: UserDatabase):
-    if '@' in message.text:
+    if message.text and '@' in message.text:
         text = message.text.split()
         words = [i for i in text if '@' in i]
         for word in words:
